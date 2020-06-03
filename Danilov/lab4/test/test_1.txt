@@ -1,0 +1,44 @@
+Тест 1
+Входные данные:
+abbab
+abbbaaabababbabaabbabba
+Выходные данные:
+10,16
+
+Тест 2
+Входные данные: 
+queue
+ququqeuqqququeq
+Выходные данные:
+-1
+
+Тест 3
+Входные данные:
+laaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+a
+Выходные данные:
+-1
+
+Тест 4
+Входные данные:
+a
+laaaaaaaaaaaaaaaaaaaaaaaa
+Выходные данные:
+1,2,3,4,5,6,7,8,9,10,11,12,13,14,1
+5,16,17,18,19,20,21,22,23,24
+
+Тест 5
+Входные данные:
+slice
+slice slice slice slice slice like a samurai cut it up real nice,
+i’m a samurai go karate on the mic, i’m a samurai samurai,
+i-i-i’m a samurai
+Выходные данные:
+0,6,12,18,24
+
+Тест 6
+Входные данные:
+hi
+he said hi, but meant not hi
+Выходные данные:
+8,26
