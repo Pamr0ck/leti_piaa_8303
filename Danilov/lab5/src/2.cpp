@@ -1,207 +1,204 @@
 #include <iostream>
-#include <map>
-#include <vector>
 #include <string>
-#include <queue>
-#include <algorithm>
+#include <vector>
+#include <map>
 
-
-using std::string;
-using std::map;
-using std::vector;
-using std::queue;
-using std::cin;
-using std::cout;
-using std::endl;
-using std::pair;
-
-class BorNode;
-typedef map<const char, BorNode *> LinksMap;
-
-
-class BorNode {
-public:
-    LinksMap links;
-    BorNode *fail;  // Предыдущее состояние для функции отката. Только для root равно NULL.
-    BorNode *term; // Ближайшее терминальное состояние. Если отстутствует - NULL
-    int out;
-
-public:
-    explicit BorNode(BorNode *fail_node = nullptr)
-            : fail(fail_node)
-            , term(nullptr)
-            , out(-1)
-    { }
-
-    BorNode* getLink(const char c) const
-    {
-        auto iter = links.find(c);
-        if (iter != links.cend()) {
-            return iter->second;
-        }
-        else {
-            return nullptr;
-        }
-    }
-
-    bool isTerminal() const
-    {
-        return (out >= 0);
-    }
-
-    void showBor(){
-
-
-
-    }
+struct BorNode
+{
+    std::map<char, int> next;//потомки вершины
+    std::map<char, int> go;// путь автомата
+    std::vector<int> number;// массив номеров шаблонов
+    int prev = 0;// индекс предка
+    int deep = 0;// глубина вершины
+    int suffix = -1;// индекс суффиксного перехода
+    bool isLeaf = false;// является ли вершина листом
+    char prevChar = 0;// символ предка
 };
 
-typedef vector< pair< int, pair< int, string > > > Answer;
-typedef vector< pair< int, pair< int, string > > >::iterator AnswerIterator;
-bool operator < (AnswerIterator a, AnswerIterator b){
-    if (a->first < b->first)
-        return true;
-    else if(a->first == b->first)
-        return a->second.first < b->second.first;
-    else return false;
-}
 
-class AhoCorasick
+class AhoCorasick// класс реализующий алгоритм Ахо-Корасик
 {
-public:
-    typedef void (*Callback) (const char* substr);
-    BorNode root;
-    vector<string> words;
-    BorNode* current_state{};
-    Answer answer;
+private:
+    std::vector<BorNode> nodes;// вектор вершин
+    std::string pattern;//паттерн
+    char joker;// символ джокера
+    char forbidden;//запрещенный символ
+    int countTermNodes;// количество терминальных вершин
+    std::vector<std::string> pattenArray;// вектор подпаттернов
+    int patternLen{};// длина паттерна
+    std::vector<int> matchPatterns;// вектор совпадений подпаттернов
+    std::vector<int> patternsLength;// вектор длин подпаттернов образца
 
 public:
-    void addString(const char* const str)
-    {
-        BorNode *current_node = &root;
-        for(int i = 0; *(str + i); ++i) {
-            BorNode *child_node = current_node->getLink(*(str + i));
-            if (!child_node) {
-                child_node = new BorNode(&root);
-                current_node->links[*(str + i)] = child_node;
-            }
-            current_node = child_node;
-        }
-        current_node->out = words.size();
-        words.push_back(str);
+    explicit AhoCorasick(char joker, char forbidden): matchPatterns(10000000){
+        BorNode root;
+        root.prev = -1;
+        nodes.push_back(root);
+        this->joker = joker;
+        this->forbidden = forbidden;
+        countTermNodes = 0;
     }
 
+    void readPattern(std::string& str){
+        this->pattern = str;
+        patternLen = str.size();
+        split(str);
+        for (const auto& pattern : pattenArray) {
+            addPattern(pattern);
+        }
+    }
 
-
-    void init()
+    void search(const std::string& str)
     {
-        queue<BorNode *> q;
-        q.push(&root);
-        while (!q.empty()) {
-            BorNode *current_node = q.front();
-            q.pop();
-            for (auto iter = current_node->links.cbegin(); iter != current_node->links.cend(); ++iter)
-            {
-                const char symbol = iter->first;
-                BorNode *child = iter->second;
+        int curr = 0;
+        for (int i = 0; i < str.size(); i++) {
+            curr = getLink(curr, str[i]);// по каждому символу переходим в новую вершину бора
+            for (int tmp = curr; tmp != 0; tmp = getSuffix(tmp)) {// также осуществляем переходы по суффиксным ссылкам
+                if (nodes[tmp].isLeaf) {
+                    for (int j = 0; j < nodes[tmp].number.size(); j++) {
+                        if (i + 1 - patternsLength[nodes[tmp].number[j] - 1] - nodes[tmp].deep >= 0 &&
+                            i + 1 - patternsLength[nodes[tmp].number[j] - 1] - nodes[tmp].deep <= str.size() - patternLen){//если паттерн не выходит за границы (слева и справа)
+                            matchPatterns[i + 1 - patternsLength[nodes[tmp].number[j] - 1] - nodes[tmp].deep]++;// добавляем индекс совпадения в вектор совпадений подпаттернов
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-                BorNode *temp_node = current_node->fail;
-                while (temp_node) {
-                    BorNode *fail_candidate = temp_node->getLink(symbol);
-                    if (fail_candidate) {
-                        child->fail = fail_candidate;
+    void printResult(const std::string& text) const{
+
+        std::vector<bool> cutStr(text.size());// вектор попадания символов, вошедших в паттерн
+        std::string str;// входной текст без паттернов
+
+        bool result_exist = false;
+
+        for (int i = 0; i < matchPatterns.size(); i++) {
+            if (matchPatterns[i] == patternsLength.size()) {// если число вошедших подпаттернов в индексе совпадет с числом всех подпаттнов, то это индекс вхождения паттерна
+                bool is_correct = true;
+                for(int k = 0; k < i + patternLen; k++){
+                    if(pattern[k - i] && text[k] == forbidden && pattern[k-i] == joker){
+                        is_correct = false;
                         break;
                     }
-                    temp_node = temp_node->fail;
                 }
-                if (child->fail->isTerminal()) {
-                    child->term = child->fail;
+
+                if (is_correct) {
+                    std::cout << i + 1 << "\n";
+                    result_exist = true;
+                    for (int j = 0; j < patternLen; j++)
+                        cutStr[i + j] = true;// помечаем, что символ вошел в паттерн
                 }
-                else {
-                    child->term = child->fail->term;
+
+            }
+        }
+        for (int i = 0; i < cutStr.size(); i++){
+            if (!cutStr[i])
+                str.push_back(text[i]);// заполняем строку символов, которые не вошли в паттерн
+        }
+
+        if(!result_exist){//проверка наличия ответа
+            std::cout << "\nNo result. Template forbidden!";
+        }
+    }
+
+
+private:
+
+    void split(std::string str){// функция разделения паттернов на подпаттерны
+        std::string buf;
+        for (int i=0; i<str.size(); i++){
+            if (str[i] == joker){
+                if (!buf.empty()) {
+                    pattenArray.push_back(buf);                      //заполняет массив подпаттернов
+                    patternsLength.push_back(i - buf.size());       //и массив их вхождения в паттерне
+                    buf = "";
                 }
-                q.push(child);
+            }
+            else {
+                buf.push_back(str[i]);
+                if (i == str.size() - 1){
+                    pattenArray.push_back(buf);
+                    patternsLength.push_back(i - buf.size() + 1);
+                }
             }
         }
     }
 
-    bool step(const char c)
+    void addPattern(const std::string& str)// добавление символов паттерна в бор
     {
-        while (current_state) {
-            BorNode *candidate = current_state->getLink(c);
-            if (candidate) {
-                current_state = candidate;
-                return true;
+        int current = 0;
+        for (char i : str) {
+            if (nodes[current].next.find(i) == nodes[current].next.end()) {// если для текущей вершины нет перехода по символу
+                BorNode ver;// вершина создается и добавляется в бор
+                ver.suffix = -1;
+                ver.prev = current;
+                ver.prevChar = i;
+                nodes.push_back(ver);
+                nodes[current].next[i] = nodes.size() - 1;
             }
-            current_state = current_state->fail;
+            current = nodes[current].next[i];
         }
-        current_state = &root;
-        return false;
+        countTermNodes++;
+        nodes[current].number.push_back(countTermNodes);   //номера подпаттернов
+        nodes[current].isLeaf = true;                           // вершина объявляется терминальной
+        nodes[current].deep = str.size();
     }
 
-    void printTermsForCurrentState(Callback callback) const
+    int getSuffix(int index)// получение вершины перехода по суффиксной ссылке
     {
-        if (current_state->isTerminal()) {
-            callback(words[current_state->out].c_str());
+        if (nodes[index].suffix == -1) {// если суффиксная ссылка еще не определена
+            if (index == 0 || nodes[index].prev == 0) {
+                nodes[index].suffix = 0;// если корень или родитель корень - то суффиксная ссылка ведет в корень
+            }
+            else {
+                nodes[index].suffix = getLink(getSuffix(nodes[index].prev), nodes[index].prevChar);// иначе переходим ищем суффикс через суффикс родителя
+            }
         }
-        BorNode *temp_node = current_state->term;
-        while (temp_node) {
-            callback(words[temp_node->out].c_str());
-            temp_node = temp_node->term;
-        }
+        return nodes[index].suffix;// возвращаем индекс суффиксной вершины в векторе вершин
     }
 
-    void search(const char* str, Callback callback)
+    int getLink(int index, char ch)// получить путь автомата из текущей вершины
     {
-        current_state = &root;
-        for(int i = 0; *(str + i); i++) {
-            bool flag = step(str[i]);
-            if(current_state->isTerminal()) {
-                answer.push_back({i - words[current_state->out].size() + 2,{current_state->out + 1, words[current_state->out]}});
-                //printTermsForCurrentState(callback);
+        if (nodes[index].go.find(ch) == nodes[index].go.end()) {// если пути по символу из текущей вершины нет
+            if (nodes[index].next.find(ch) != nodes[index].next.end()) {
+                nodes[index].go[ch] = nodes[index].next[ch];// если из вершины есть дети, то путь прокладывается через них
             }
-            BorNode *temp_node = current_state->term;
-            while (temp_node) {
-                answer.push_back({i - words[temp_node->out].size() + 2,{temp_node->out + 1, words[temp_node->out]}});
-                temp_node = temp_node->term;
+            else {
+                if (index == 0){
+                    nodes[index].go[ch] = 0;
+                }
+                else{
+                    nodes[index].go[ch] = getLink(getSuffix(index), ch);// иначе путь прокладывается через суффиксную ссылку
+                }
             }
         }
+        return nodes[index].go[ch];// возвращаем индекс вершины пути в векторе вершин
     }
 };
 
-void print(const char* str)
-{
-    cout << "found substring " << str << "\n";
-}
-
-int main()
-{
-    AhoCorasick ak;
-
-    char* search = new char[100000];
-    cin >> search;
 
 
-    int n;
-    cin >> n;
+int main() {
+    std::string str;
+    std::string pattern;
+    char joker;
+    char forbidden;
+    std::cout << "Enter string:" << std::endl;
+    std::cin >> str;
+    std::cout << "Enter pattern:" << std::endl;
+    std::cin >> pattern;
+    std::cout << "Enter joker:" << std::endl;
+    std::cin >> joker;
+    std::cout << "Enter forbidden character:" << std::endl;
+    std::cin >> forbidden;
 
 
-    for(int i = 0; i < n; i++){
-        char *temp = new char[100000];
-        cin >> temp;
-        ak.addString(temp);
-    }
-
-    ak.init();
-    ak.search(search, print);
-    std::sort(ak.answer.begin(), ak.answer.end());
-    for(int i = 0; i < ak.answer.size(); i++){
-        cout << ak.answer[i].first << " " << ak.answer[i].second.first;
-        if (i != ak.answer.size() - 1){
-            cout << endl;
-        }
-    }
-    cin.get();
+    auto* ahoCorasick = new AhoCorasick(joker, forbidden);
+    ahoCorasick->readPattern(pattern);
+    ahoCorasick->search(str);
+    ahoCorasick->printResult(str);
 
     return 0;
 }
